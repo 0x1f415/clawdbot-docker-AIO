@@ -81,6 +81,10 @@ RUN pnpm ui:build
 
 ENV NODE_ENV=production
 
+# Copy startup entrypoint script
+COPY entrypoint-with-wake.sh /entrypoint-with-wake.sh
+RUN chmod +x /entrypoint-with-wake.sh
+
 # Expose ports
 # 18789 - Control UI / Dashboard
 # 18790 - WebChat (optional)
@@ -90,5 +94,5 @@ EXPOSE 18789 18790
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD node dist/index.js health || exit 1
 
-# Start the gateway
-CMD ["node", "dist/index.js", "gateway"]
+# Start the gateway with startup heartbeat wake enabled
+CMD ["/bin/bash", "/entrypoint-with-wake.sh"]

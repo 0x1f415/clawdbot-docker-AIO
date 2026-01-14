@@ -97,6 +97,58 @@ The gateway will now be running with:
 - **Control UI / Dashboard**: http://localhost:18789
 - **WebChat** (optional): http://localhost:18790
 
+## Startup Behavior
+
+By default, this image triggers a heartbeat wake immediately after the gateway starts. This is useful for:
+- Catching issues after container restarts
+- Agent checking in automatically after deployment
+- Monitoring and alerting on startup
+
+The startup wake process:
+1. Starts the gateway
+2. Waits for it to be healthy
+3. Triggers an immediate heartbeat pulse
+4. Keeps the gateway running normally
+
+### Customize Startup Wake
+
+You can control the startup behavior with environment variables:
+
+```bash
+docker run -d \
+  --name clawdbot-gateway \
+  -p 18789:18789 \
+  -p 18790:18790 \
+  -v ~/.clawdbot:/root/.clawdbot \
+  -v ~/clawd:/root/clawd \
+  -e WAKE_DELAY=10 \
+  -e WAKE_TEXT="Custom startup message" \
+  --restart unless-stopped \
+  clawdbot:latest
+```
+
+**Available environment variables:**
+- `WAKE_DELAY` - Seconds to wait before triggering wake (default: `5`)
+- `WAKE_TEXT` - Custom message for the wake (default: `"Gateway started, checking in."`)
+- `GATEWAY_PORT` - Gateway port to health-check (default: `18789`)
+
+### Skip Startup Wake
+
+If you want to use the standard gateway startup without the wake, override the command:
+
+```bash
+docker run -d \
+  --name clawdbot-gateway \
+  -p 18789:18789 \
+  -p 18790:18790 \
+  -v ~/.clawdbot:/root/.clawdbot \
+  -v ~/clawd:/root/clawd \
+  --restart unless-stopped \
+  --entrypoint node \
+  clawdbot:latest \
+  dist/index.js gateway
+```
+
 ## Unraid Setup
 
 ### Container Configuration
