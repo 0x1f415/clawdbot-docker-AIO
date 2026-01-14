@@ -10,12 +10,13 @@ ENV PATH="/root/.bun/bin:${PATH}"
 # Enable corepack for pnpm
 RUN corepack enable
 
-# Install Chromium and dependencies for browser automation
+# Install Google Chrome for browser automation (recommended by Clawdbot docs)
+# Chrome works better than snap Chromium which has AppArmor restrictions
 RUN apt-get update && \
     apt-get install -y \
-    chromium \
-    chromium-driver \
-    # Chromium dependencies
+    wget \
+    gnupg \
+    # Chrome/Chromium dependencies
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -33,17 +34,23 @@ RUN apt-get update && \
     libcairo2 \
     libasound2 \
     libatspi2.0-0 \
+    libxss1 \
+    libxtst6 \
     # Fonts for better rendering
     fonts-liberation \
     fonts-noto-color-emoji \
     # Additional useful tools
     ca-certificates \
+    && wget -q -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && apt-get install -y /tmp/google-chrome-stable_current_amd64.deb \
+    && rm /tmp/google-chrome-stable_current_amd64.deb \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Chromium executable path environment variable
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV CHROME_BIN=/usr/bin/chromium
+# Set Chrome executable paths for various tools
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+ENV CHROME_BIN=/usr/bin/google-chrome-stable
+ENV CHROME_PATH=/usr/bin/google-chrome-stable
 
 # Install additional apt packages if specified
 ARG CLAWDBOT_DOCKER_APT_PACKAGES=""
