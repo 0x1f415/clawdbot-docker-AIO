@@ -10,6 +10,41 @@ ENV PATH="/root/.bun/bin:${PATH}"
 # Enable corepack for pnpm
 RUN corepack enable
 
+# Install Chromium and dependencies for browser automation
+RUN apt-get update && \
+    apt-get install -y \
+    chromium \
+    chromium-driver \
+    # Chromium dependencies
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+    libatspi2.0-0 \
+    # Fonts for better rendering
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    # Additional useful tools
+    ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Chromium executable path environment variable
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV CHROME_BIN=/usr/bin/chromium
+
 # Install additional apt packages if specified
 ARG CLAWDBOT_DOCKER_APT_PACKAGES=""
 RUN if [ -n "$CLAWDBOT_DOCKER_APT_PACKAGES" ]; then \
