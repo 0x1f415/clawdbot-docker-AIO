@@ -10,6 +10,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      clawdbot_ref:
+        description: 'Clawdbot git ref (branch/tag/sha)'
+        required: false
+        default: 'main'
 
 env:
   REGISTRY: ghcr.io
@@ -25,17 +30,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Checkout Clawdbot repository
-        uses: actions/checkout@v4
-        with:
-          repository: clawdbot/clawdbot
-          path: clawdbot
-          
-      - name: Copy Dockerfile and entrypoint to Clawdbot repo
-        run: |
-          cp Dockerfile entrypoint-with-wake.sh clawdbot/
-
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -63,17 +57,18 @@ jobs:
             type=sha,prefix=,format=short
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v5
         with:
-          context: ./clawdbot
-          file: ./clawdbot/Dockerfile
+          context: .
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            CLAWDBOT_DOCKER_APT_PACKAGES=ffmpeg build-essential git curl
+            CLAWDBOT_GIT_REF=${{ github.event.inputs.clawdbot_ref || 'main' }}
+            CLAWDBOT_DOCKER_APT_PACKAGES=ffmpeg build-essential
 
       - name: Build summary
         if: github.event_name != 'pull_request'
@@ -87,7 +82,18 @@ jobs:
           echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Pull command:**" >> $GITHUB_STEP_SUMMARY
+          echo "### Pull command" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Run command" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker run -d \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -p 18789:18789 \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -p 8443:8443 \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -e PASSWORD=your-password \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -v ~/.clawdbot:/home/coder/.clawdbot \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -v ~/clawd:/home/coder/clawd \\" >> $GITHUB_STEP_SUMMARY
+          echo "  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
