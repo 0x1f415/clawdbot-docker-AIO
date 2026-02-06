@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     sudo \
     wget \
+    unzip \
     # Chrome dependencies
     libnss3 \
     libnspr4 \
