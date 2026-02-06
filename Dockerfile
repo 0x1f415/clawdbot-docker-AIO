@@ -1,4 +1,4 @@
-# Build Clawdbot from source
+# Build Clawdbot from source 
 FROM node:22-bookworm AS clawdbot-build
 
 RUN apt-get update \
