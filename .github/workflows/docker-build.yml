@@ -10,8 +10,8 @@ on:
     branches:
       - main
   schedule:
-    # Rebuild daily at 6am UTC to pick up new clawdbot releases
-    - cron: '0 6 * * *'
+    # Rebuild weekly on Sundays at 6am UTC to pick up new clawdbot releases
+    - cron: '0 6 * * 0'
   workflow_dispatch:
     inputs:
       clawdbot_version:
