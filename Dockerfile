@@ -1,24 +1,52 @@
-FROM node:22-bookworm
+# Build Clawdbot from source
+FROM node:22-bookworm AS clawdbot-build
 
-# Prevent interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    git \
+    ca-certificates \
+    curl \
+    python3 \
+    make \
+    g++ \
+  && rm -rf /var/lib/apt/lists/*
 
-# Install Bun (required for Clawdbot build scripts)
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 
-# Enable corepack for pnpm
 RUN corepack enable
 
-# Install Google Chrome for browser automation (recommended by Clawdbot docs)
-# Chrome works better than snap Chromium which has AppArmor restrictions
-RUN apt-get update && \
-    apt-get install -y \
-    wget \
-    gnupg \
+WORKDIR /clawdbot
+
+ARG CLAWDBOT_GIT_REF=main
+RUN git clone --depth 1 --branch "${CLAWDBOT_GIT_REF}" https://github.com/clawdbot/clawdbot.git .
+
+RUN pnpm install --frozen-lockfile || pnpm install --no-frozen-lockfile
+RUN pnpm build
+RUN pnpm ui:install && pnpm ui:build
+
+# ---------------------------------------------------------------------------
+# Runtime: code-server + tools + Clawdbot
+# ---------------------------------------------------------------------------
+FROM codercom/code-server:latest
+
+USER root
+
+# Base tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    ca-certificates \
     git \
-    # Chrome/Chromium dependencies
+    gnupg \
+    jq \
+    postgresql-client \
+    ripgrep \
+    htop \
+    vim \
+    procps \
+    sudo \
+    wget \
+    # Chrome dependencies
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -38,44 +66,44 @@ RUN apt-get update && \
     libatspi2.0-0 \
     libxss1 \
     libxtst6 \
-    # Fonts for better rendering
     fonts-liberation \
     fonts-noto-color-emoji \
-    # Additional useful tools
-    ca-certificates \
-    sudo \
-    procps \
-    htop \
-    vim \
-    && wget -q -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    && apt-get install -y /tmp/google-chrome-stable_current_amd64.deb \
-    && rm /tmp/google-chrome-stable_current_amd64.deb \
-    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Chrome executable paths for various tools
+# GitHub CLI
+RUN curl -sSfL https://cli.github.com/packages/githubcli-archive-keyring.gpg | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update && apt-get install -y gh && rm -rf /var/lib/apt/lists/*
+
+# Node 22 + corepack (for pnpm)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
+
+RUN corepack enable
+
+# Bun
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
+
+# Google Chrome for browser automation
+RUN wget -q -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && apt-get update && apt-get install -y /tmp/google-chrome-stable_current_amd64.deb \
+    && rm /tmp/google-chrome-stable_current_amd64.deb \
+    && rm -rf /var/lib/apt/lists/*
+
+# Chrome paths
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 ENV CHROME_BIN=/usr/bin/google-chrome-stable
 ENV CHROME_PATH=/usr/bin/google-chrome-stable
 
-# Install GitHub CLI
-RUN apt-get update && \
-    apt-get install -y gh && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Copy Clawdbot build
+COPY --from=clawdbot-build /clawdbot /clawdbot
 
-# Install code-server
-ARG CODE_SERVER_VERSION=4.96.4
-RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --version=${CODE_SERVER_VERSION}
+# Global clawdbot command
+RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /clawdbot/dist/index.js "$@"' > /usr/local/bin/clawdbot \
+    && chmod +x /usr/local/bin/clawdbot
 
-# Install useful VS Code extensions for code-server
-RUN code-server --install-extension ms-python.python \
-    && code-server --install-extension dbaeumer.vscode-eslint \
-    && code-server --install-extension esbenp.prettier-vscode \
-    && code-server --install-extension eamodio.gitlens \
-    || true
-
-# Install additional apt packages if specified
+# Install additional apt packages if specified at build time
 ARG CLAWDBOT_DOCKER_APT_PACKAGES=""
 RUN if [ -n "$CLAWDBOT_DOCKER_APT_PACKAGES" ]; then \
     apt-get update && \
@@ -84,49 +112,41 @@ RUN if [ -n "$CLAWDBOT_DOCKER_APT_PACKAGES" ]; then \
     rm -rf /var/lib/apt/lists/*; \
     fi
 
-WORKDIR /app
+# Clawdbot state directories
+ENV CLAWDBOT_STATE_DIR=/home/coder/.clawdbot
+ENV CLAWDBOT_WORKSPACE=/home/coder/clawd
+RUN mkdir -p "${CLAWDBOT_STATE_DIR}" "${CLAWDBOT_WORKSPACE}" \
+    && chown -R coder:coder "${CLAWDBOT_STATE_DIR}" "${CLAWDBOT_WORKSPACE}"
 
-# Cache dependencies unless package metadata changes
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
-COPY ui/package.json ./ui/package.json
-COPY patches ./patches
-COPY scripts ./scripts
+# VS Code extensions
+RUN code-server --install-extension ms-python.python || true \
+    && code-server --install-extension dbaeumer.vscode-eslint || true \
+    && code-server --install-extension esbenp.prettier-vscode || true \
+    && code-server --install-extension eamodio.gitlens || true
 
-RUN pnpm install --frozen-lockfile
+# Entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-# Copy application code
-COPY . .
+# Verify installations
+RUN gh --version && node -v && npm -v && clawdbot --help && google-chrome-stable --version
 
-# Build the application
-RUN pnpm build
-RUN pnpm ui:install
-RUN pnpm ui:build
-
-ENV NODE_ENV=production
-
-# Copy startup entrypoint script
-COPY entrypoint-with-wake.sh /entrypoint-with-wake.sh
-RUN chmod +x /entrypoint-with-wake.sh
-
-# code-server config directory
-RUN mkdir -p /root/.config/code-server
-
-# Expose ports
-# 18789 - Control UI / Dashboard
-# 18790 - WebChat (optional)
-# 8443  - code-server (VS Code in browser)
+# Ports
+# 18789 - Clawdbot Dashboard
+# 18790 - WebChat
+# 8443  - code-server
 EXPOSE 18789 18790 8443
 
-# Environment variables for code-server
+# Environment
+ENV NODE_ENV=production
 ENV CODE_SERVER_ENABLED=true
-ENV CODE_SERVER_PORT=8443
-ENV CODE_SERVER_PASSWORD=""
-ENV CODE_SERVER_AUTH=password
-ENV CODE_SERVER_BIND_ADDR=0.0.0.0:8443
+ENV GATEWAY_PORT=18789
+ENV WAKE_DELAY=5
+ENV WAKE_TEXT="Gateway started, checking in."
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD node dist/index.js health || exit 1
+USER coder
 
-# Start the gateway with startup heartbeat wake enabled
-CMD ["/bin/bash", "/entrypoint-with-wake.sh"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD clawdbot health || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]
