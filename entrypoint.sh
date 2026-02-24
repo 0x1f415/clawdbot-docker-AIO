@@ -1,6 +1,6 @@
 #!/bin/bash
-# Clawdbot + code-server entrypoint
-# Starts code-server (optional) and Clawdbot gateway
+# OpenClaw + code-server entrypoint
+# Starts code-server (optional) and OpenClaw gateway
 
 set -e
 
@@ -10,17 +10,17 @@ WAKE_DELAY="${WAKE_DELAY:-5}"
 WAKE_TEXT="${WAKE_TEXT:-Gateway started, checking in.}"
 CODE_SERVER_ENABLED="${CODE_SERVER_ENABLED:-true}"
 CODE_SERVER_PORT="${CODE_SERVER_PORT:-8443}"
-CLAWDBOT_WORKSPACE="${CLAWDBOT_WORKSPACE:-/home/coder/clawd}"
+OPENCLAW_WORKSPACE="${OPENCLAW_WORKSPACE:-/home/coder/clawd}"
 
 # Clean up stale lock files
 echo "[entrypoint] Cleaning up stale lock files..."
-find /home/coder/.clawdbot -name "*.lock" -type f -delete 2>/dev/null || true
+find /home/coder/.openclaw -name "*.lock" -type f -delete 2>/dev/null || true
 
 # Start Chrome in headless mode for browser automation
 echo "[entrypoint] Starting Chrome..."
 google-chrome-stable --headless=new --no-sandbox --disable-gpu \
   --remote-debugging-port=18800 \
-  --user-data-dir=/home/coder/.clawdbot/browser/clawd/user-data \
+  --user-data-dir=/home/coder/.openclaw/browser/clawd/user-data \
   about:blank > /tmp/chrome.log 2>&1 &
 CHROME_PID=$!
 echo "[entrypoint] Chrome started (PID $CHROME_PID)"
@@ -32,14 +32,14 @@ if [ "$CODE_SERVER_ENABLED" = "true" ]; then
     
     # code-server will use its own config or env vars
     # PASSWORD env var is picked up automatically by code-server
-    code-server --bind-addr "0.0.0.0:$CODE_SERVER_PORT" "$CLAWDBOT_WORKSPACE" > /tmp/code-server.log 2>&1 &
+    code-server --bind-addr "0.0.0.0:$CODE_SERVER_PORT" "$OPENCLAW_WORKSPACE" > /tmp/code-server.log 2>&1 &
     CODE_SERVER_PID=$!
     echo "[entrypoint] code-server started (PID $CODE_SERVER_PID)"
 fi
 
-# Start Clawdbot gateway
-echo "[entrypoint] Starting Clawdbot gateway..."
-clawdbot gateway &
+# Start OpenClaw gateway
+echo "[entrypoint] Starting OpenClaw gateway..."
+openclaw gateway &
 GATEWAY_PID=$!
 
 # Signal handler
@@ -86,7 +86,7 @@ wait_for_gateway() {
 trigger_wake() {
     sleep "$WAKE_DELAY"
     echo "[entrypoint] Triggering wake..."
-    clawdbot wake --text "$WAKE_TEXT" --mode now --timeout 30000 || echo "[entrypoint] Wake failed (non-fatal)"
+    openclaw wake --text "$WAKE_TEXT" --mode now --timeout 30000 || echo "[entrypoint] Wake failed (non-fatal)"
 }
 
 # Background: wait for gateway then wake
@@ -95,7 +95,7 @@ trigger_wake() {
 # Startup info
 echo ""
 echo "=========================================="
-echo "  Clawdbot + code-server"
+echo "  OpenClaw + code-server"
 echo "=========================================="
 echo "  Dashboard:    http://localhost:$GATEWAY_PORT"
 echo "  WebChat:      http://localhost:18790"

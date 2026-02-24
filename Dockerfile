@@ -67,9 +67,12 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 ENV CHROME_BIN=/usr/bin/google-chrome-stable
 ENV CHROME_PATH=/usr/bin/google-chrome-stable
 
-# Install Clawdbot globally via npm
-ARG CLAWDBOT_VERSION=latest
-RUN npm install -g clawdbot@${CLAWDBOT_VERSION}
+# Install OpenClaw (formerly Clawdbot) globally via npm
+ARG OPENCLAW_VERSION=latest
+RUN npm install -g openclaw@${OPENCLAW_VERSION}
+
+# Install DAVE protocol support for Discord voice
+RUN cd /usr/lib/node_modules/openclaw && npm install @snazzah/davey
 
 # Additional apt packages (optional)
 ARG CLAWDBOT_DOCKER_APT_PACKAGES=""
@@ -79,11 +82,11 @@ RUN if [ -n "$CLAWDBOT_DOCKER_APT_PACKAGES" ]; then \
     rm -rf /var/lib/apt/lists/*; \
     fi
 
-# Clawdbot directories
-ENV CLAWDBOT_STATE_DIR=/home/coder/.clawdbot
-ENV CLAWDBOT_WORKSPACE=/home/coder/clawd
-RUN mkdir -p "${CLAWDBOT_STATE_DIR}" "${CLAWDBOT_WORKSPACE}" \
-    && chown -R coder:coder "${CLAWDBOT_STATE_DIR}" "${CLAWDBOT_WORKSPACE}"
+# OpenClaw directories
+ENV OPENCLAW_STATE_DIR=/home/coder/.openclaw
+ENV OPENCLAW_WORKSPACE=/home/coder/clawd
+RUN mkdir -p "${OPENCLAW_STATE_DIR}" "${OPENCLAW_WORKSPACE}" \
+    && chown -R coder:coder "${OPENCLAW_STATE_DIR}" "${OPENCLAW_WORKSPACE}"
 
 # VS Code extensions
 RUN code-server --install-extension ms-python.python || true \
@@ -96,7 +99,7 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Verify
-RUN gh --version && node -v && npm -v && clawdbot --help && google-chrome-stable --version
+RUN gh --version && node -v && npm -v && openclaw --help && google-chrome-stable --version
 
 # Ports: 18789=Dashboard, 18790=WebChat, 8443=code-server
 EXPOSE 18789 18790 8443
@@ -108,6 +111,6 @@ ENV GATEWAY_PORT=18789
 USER coder
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD clawdbot health || exit 1
+  CMD openclaw health || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
